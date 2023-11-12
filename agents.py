@@ -1,32 +1,52 @@
 import random
+from utils import calculate_ema
+
+
+class Position:
+    def __init__(self, type, day, btc_price, btc, gbp) -> None:
+        self.type = type
+        self.day = day
+        self.btc_price = btc_price
+        self.BTC = btc
+        self.GBP = gbp
 
 
 class Agent:
-    def __init__(self, btc_range=(1, 5), gbp_range=(200, 10_000)) -> None:
+    def __init__(self, id, btc_range=(1, 5), gbp_range=(200, 10_000)) -> None:
+        self.id = id
         self.BTC = btc_range[0] + (random.random() * btc_range[1])
         self.GBP = gbp_range[0] + (random.random() * gbp_range[1])
-        self.current_position = None
+        self.positions = []
 
-    def open(self):
-        pass
+    # only open and close here can manipulate the market_stats object
+    def open(self, market_stats):
+        print(f"{self.id} {type(self)} open")
+        self.positions.append(
+            Position("open", market_stats["day"], market_stats["btc_prices"][-1], 0, 0)
+        )
 
-    def close(self):
-        pass
+    def close(self, market_stats):
+        print(f"{self.id} {type(self)} close")
+        self.positions.append(
+            Position("close", market_stats["day"], market_stats["btc_prices"][-1], 0, 0)
+        )
 
 
 class RandomTrader(Agent):
-    def trade(self):
+    def trade(self, market_stats):
         if random.random() < 0.6:
             return
-        if self.current_position:
-            self.close()
+        if len(self.positions) == 0 or self.positions[-1].type == "close":
+            self.open(market_stats)
         else:
-            self.open()
+            self.close(market_stats)
 
 
 class Chartist(Agent):
-    def __init__(self, type=None) -> None:
-        super().__init__()
+    def __init__(self, id, type=None) -> None:
+        super().__init__(id=id)
+        self.rule1_n = 10
+        self.rule2_n = 10
         match type:
             case 1:
                 self.rule1open_importance = 0.8
@@ -49,38 +69,59 @@ class Chartist(Agent):
                 self.rule1close_importance = 0.2
                 self.rule2close_importance = 0.8
 
-    def rule1open(self) -> bool:
-        pass
+    def rule1open(self, market_stats) -> bool:
+        # Check the Bitcoin price today compared to the average price in the
+        # past n days. If the price today is lower than average price in the past n days, open
+        # a position.
+        prices = market_stats["btc_close_prices"][-self.rule1_n :]
+        average = sum(prices) / len(prices)
+        if market_stats["btc_price"] < average:
+            return True
+        return False
 
-    def rule1close(self) -> bool:
-        pass
+    def rule1close(self, market_stats) -> bool:
+        # If you opened a position in the past n days and the price is higher today,
+        # close that position.
+        if abs(self.positions[-1].day - market_stats["day"]) > self.rule1_n:
+            return False
+        if market_stats["btc_price"] > self.positions[-1].btc_price:
+            return True
+        return False
 
-    def rule2open(self) -> bool:
-        pass
+    def rule2open(self, market_stats) -> bool:
+        # If the close price is higher than EMA(n), then open a position
+        ema = calculate_ema(market_stats["btc_close_prices"], self.rule2_n)
+        if market_stats["btc_price"] > ema:
+            return True
+        return False
 
-    def rule2close(self) -> bool:
-        pass
+    def rule2close(self, market_stats) -> bool:
+        # If the close price is lower than EMA(n) for an open position, close it.
+        ema = calculate_ema(market_stats["btc_close_prices"], self.rule2_n)
+        if ema < self.positions[-1].btc_price:
+            return True
+        return False
 
-    def try_open(self):
+    def try_open(self, market_stats):
         action = random.choices(
-            [self.rule1open(), self.rule2open()],
+            [self.rule1open(market_stats), self.rule2open(market_stats)],
             weights=[self.rule1open_importance, self.rule2open_importance],
         )[0]
         if not action:
             return
-        self.open()
+        self.open(market_stats)
 
-    def try_close(self):
+    def try_close(self, market_stats):
         action = random.choices(
-            [self.rule1close(), self.rule2close()],
+            [self.rule1close(market_stats), self.rule2close(market_stats)],
             weights=[self.rule1close_importance, self.rule2close_importance],
         )[0]
         if not action:
             return
-        self.close()
+        self.close(market_stats)
 
-    def trade(self):
-        if self.current_position:
-            self.try_close()
+    def trade(self, market_stats):
+        if len(self.positions) == 0 or self.positions[-1].type == "close":
+            self.try_open(market_stats)
         else:
-            self.try_open()
+            self.try_close(market_stats)

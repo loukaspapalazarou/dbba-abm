@@ -7,12 +7,11 @@ if __name__ == "__main__":
     end = date(2023, 10, 31)
     days = (end - start).days
 
-    m = Market(agents=10)
-    print(m.stats["btc_price"])
-    # m.simulate(days=10)
+    m = Market(agents=100)
+    m.simulate(days=10)
+
+    print(m.stats["btc_prices"])
 
     # TODO
-    # Rules
-    # Price update
-    # Open and close
+    # Open and close, individual change and market change
     # Extract stats from simulation
