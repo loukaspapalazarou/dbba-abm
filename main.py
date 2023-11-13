@@ -1,5 +1,6 @@
 from datetime import date
 from market import Market
+from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
     # between January 1, 2020 and October 31, 2023.
@@ -7,11 +8,10 @@ if __name__ == "__main__":
     end = date(2023, 10, 31)
     days = (end - start).days
 
-    m = Market(agents=100)
-    m.simulate(days=10)
+    m = Market(agents=10)
+    m.simulate(days=100)
+    m.collect_statistics()
 
-    print(m.stats["btc_prices"])
-
-    # TODO
-    # Open and close, individual change and market change
-    # Extract stats from simulation
+    pr = m.stats["btc_close_prices"]
+    plt.plot(range(len(pr)), pr)
+    plt.show()
