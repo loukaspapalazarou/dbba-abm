@@ -4,12 +4,18 @@ import utils
 import random
 from parameters import *
 import math
+import os
+from matplotlib import pyplot as plt
+import pandas as pd
+
+import shutil
 
 
 class Market:
     def __init__(self, agents) -> None:
-        self.btc_close_prices = utils.load_btc_prices("BTC-GBP.csv", "Close")
+        self.btc_close_prices = utils.load_historic_btc_prices("BTC-GBP.csv", "Close")
         self.btc_price = self.btc_close_prices[-1]
+        self.initial_btc_price = self.btc_price
         self.btc = random.uniform(*MARKET_BTC_INIT)
         self.gbp = random.uniform(*MARKET_GBP_INIT)
         self.current_day = 0
@@ -28,7 +34,10 @@ class Market:
         return MarketStats(self.btc_price, self.btc_close_prices, self.current_day)
 
     def get_total_btc(self):
-        return sum(a.btc for a in self.agents)
+        return self.btc + sum(a.btc for a in self.agents)
+
+    def get_total_gbp(self):
+        return self.gbp + sum(a.gbp for a in self.agents)
 
     def add_btc(self):
         new_btc = int(self.get_total_btc() * 0.6)
@@ -60,6 +69,7 @@ class Market:
                 agent.current_position = Position(
                     order.btc, day=self.current_day, price=self.btc_price
                 )
+                agent.opened_positions += 1
         elif order.type == OrderType.CLOSE:
             if (
                 self.gbp >= order.btc * market_stats.btc_price
@@ -80,15 +90,21 @@ class Market:
             sign = -1
 
         price_shift = math.floor(math.sqrt(2) / 2 * sign * math.sqrt(order.btc))
-
         self.btc_price += price_shift
+        self.btc_price = max(self.btc_price, 0.001)
 
-    def simulate(self, days):
+    def cyberattack(self):
+        print("Cyberattack!")
+
+    def simulate(self, days, cyberattack=False):
         for day in range(days):
             self.current_day = day
             print(f"Day {day}")
             if day % 90 == 0:
                 self.add_btc()
+            if cyberattack and day > int(days * 0.8):
+                self.cyberattack()
+                cyberattack = False
             random.shuffle(self.agents)
             for agent in self.agents:
                 # agents need info about the market to trade
@@ -96,3 +112,69 @@ class Market:
                 self.execute_order(order)
                 self.update_price(order)
             self.btc_close_prices.append(self.btc_price)
+
+    def save_simulation_stats(self, dir="experiment"):
+        stats = SimulationStats()
+        total_btc = 0
+        total_gbp = 0
+        for agent in self.agents:
+            agent_type = agent.whatami()
+            stats.num_opened_positions[agent_type] += agent.opened_positions
+            stats.btc_ratio[agent_type] += agent.btc
+            stats.gbp_ratio[agent_type] += agent.gbp
+            total_btc += agent.btc
+            total_gbp += agent.gbp
+            stats.wealth_acquisition[agent_type] += agent.calculate_wealth_acquisition(
+                current_btc_price=self.btc_price,
+                initial_btc_price=self.initial_btc_price,
+            )
+        for btc_key, gbp_key in zip(stats.btc_ratio, stats.gbp_ratio):
+            stats.btc_ratio[btc_key] = stats.btc_ratio[btc_key] / total_btc
+            stats.gbp_ratio[gbp_key] = stats.gbp_ratio[gbp_key] / total_gbp
+
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+
+        values = []
+        labels = []
+        for k in stats.btc_ratio:
+            values.append(stats.btc_ratio[k])
+            labels.append(k)
+        plt.pie(values, labels=labels)
+        plt.title("Bitcoin Ratio")
+        plt.tight_layout()
+        plt.savefig(dir + "/btc_ratio.pdf")
+        plt.clf()
+
+        values = []
+        labels = []
+        for k in stats.gbp_ratio:
+            values.append(stats.gbp_ratio[k])
+            labels.append(k)
+        plt.pie(values, labels=labels)
+        plt.title("GBP Ratio")
+        plt.tight_layout()
+        plt.savefig(dir + "/gbp_ratio.pdf")
+        plt.clf()
+
+        values = []
+        labels = []
+        for k in stats.wealth_acquisition:
+            values.append(stats.wealth_acquisition[k])
+            labels.append(k)
+        plt.bar(labels, values)
+        plt.title("Wealth Acquisition")
+        plt.tight_layout()
+        plt.savefig(dir + "/wealth_acquisition.pdf")
+        plt.clf()
+
+        data = {
+            "Agent Type": list(stats.btc_ratio.keys()),
+            "BTC Ratio": list(stats.btc_ratio.values()),
+            "GBP Ratio": list(stats.gbp_ratio.values()),
+            "Wealth Acquisition": list(stats.wealth_acquisition.values()),
+        }
+        df = pd.DataFrame(data)
+        df = df.round(4)
+        df.to_csv(os.path.join(dir, "simulation_stats.csv"), index=False)
+        shutil.copyfile("parameters.py", dir + "/parameters_snapshot.py")

@@ -9,7 +9,23 @@ class Agent:
         self.id = id
         self.btc = random.uniform(*AGENT_BTC_INIT)
         self.gbp = random.uniform(*AGENT_GBP_INIT)
+        self.initial_btc = self.btc
+        self.initial_gbp = self.gbp
         self.current_position = None
+        self.opened_positions = 0
+
+    def whatami(self):
+        s = type(self).__name__
+        if s == "Chartist":
+            s += "_" + str(self.type)
+        return s
+
+    def calculate_wealth_acquisition(self, current_btc_price, initial_btc_price):
+        gbp_profit = self.gbp - self.initial_gbp
+        btc_profit = (self.btc * current_btc_price) - (
+            self.initial_btc * initial_btc_price
+        )
+        return gbp_profit + btc_profit
 
 
 class RandomTrader(Agent):
@@ -75,7 +91,8 @@ class Chartist(Agent):
 
     def rule2open(self, market_stats):
         ema = calculate_ema(CHARTIST_RULE_2_N, market_stats.btc_close_prices)
-        return market_stats.btc_close_prices[-1] > ema
+        # return market_stats.btc_close_prices[-1] > ema
+        return market_stats.btc_price > ema
 
     def rule2close(self, market_stats):
         ema = calculate_ema(CHARTIST_RULE_2_N, market_stats.btc_close_prices)
@@ -102,13 +119,15 @@ class Chartist(Agent):
         if not want_to_trade:
             return None
 
-        if self.current_position == None:
+        if self.current_position == None and self.gbp > 0:
             order = Order(
                 self,
-                OrderType.OPEN,
-                self.gbp / market_stats.btc_price,
-                market_stats.day,
+                type=OrderType.OPEN,
+                btc=self.gbp / market_stats.btc_price,
+                day=market_stats.day,
             )
         else:
-            order = Order(self, OrderType.CLOSE, self.btc, market_stats.day)
+            order = Order(
+                self, type=OrderType.CLOSE, btc=self.btc, day=market_stats.day
+            )
         return order
