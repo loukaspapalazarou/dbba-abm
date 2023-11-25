@@ -1,25 +1,19 @@
-import random
-import math
+from agent import RandomTrader, Chartist
+from market_utils import *
 import utils
-import numpy as np
-from agents import RandomTrader, Chartist
+import random
+from parameters import *
+import math
 
 
 class Market:
-    def __init__(
-        self, agents=100, btc_range=(100, 1000), gbp_range=(100_000, 10_000_000)
-    ) -> None:
-        initial_btc = btc_range[0] + (random.random() * btc_range[1])
-        initial_gbp = gbp_range[0] + (random.random() * gbp_range[1])
-        # initialize btc price with some real values
-        historical_btc_close_prices = utils.load_btc_prices("BTC-GBP.csv", "Close")
-        self.stats = {
-            "day": 0,
-            "btc_price": historical_btc_close_prices[-1],
-            "btc_close_prices": historical_btc_close_prices[:-1],
-            "available_btc": initial_btc,  # number of BTC laying around. For example BTC sitting in Binance ready to be bought. Traders don't exchange directly.
-            "available_gbp": initial_gbp,
-        }
+    def __init__(self, agents) -> None:
+        self.btc_close_prices = utils.load_btc_prices("BTC-GBP.csv", "Close")
+        self.btc_price = self.btc_close_prices[-1]
+        self.btc = random.uniform(*MARKET_BTC_INIT)
+        self.gbp = random.uniform(*MARKET_GBP_INIT)
+        self.current_day = 0
+
         self.agents = []
         i = 0
         for _ in range(agents // 5):
@@ -30,67 +24,75 @@ class Market:
             self.agents.append(Chartist(id=i + 4, type=4))
             i += 5
 
-    def calculate_total_btc(self):
-        total_btc = self.stats["available_btc"]
-        for a in self.agents:
-            total_btc += a.BTC
-        return total_btc
+    def get_market_stats(self):
+        return MarketStats(self.btc_price, self.btc_close_prices, self.current_day)
 
-    def add_BTC(self):
-        new_btc = self.calculate_total_btc() * 0.6
-        # 30-70% of agents will get the additional bitcoin
-        selected_agents = random.sample(
-            self.agents,
-            random.randint(int(len(self.agents) * 0.4), int(len(self.agents) * 0.8)),
-        )
-        total_btc_of_selected = sum(a.BTC for a in selected_agents)
-        for agent in selected_agents:
-            agent.BTC += new_btc * (agent.BTC / total_btc_of_selected)
+    def get_total_btc(self):
+        return sum(a.btc for a in self.agents)
 
-    def update_price(self, action):
-        if action is None:
-            return
-        delta_N = random.uniform(-1000, 1000)
-        alpha = math.sqrt(2) / 2
-        price_change = math.floor(
-            alpha * math.copysign(1, delta_N) * math.sqrt(abs(delta_N))
-        )
-
-        if action == "open":
-            self.stats["btc_price"] += price_change
-        elif action == "close":
-            self.stats["btc_price"] -= price_change
-
-        self.stats["btc_price"] = max(self.stats["btc_price"], 0)
-
-    def print_market_stats(self):
-        print("Available BTC:", round(self.stats["available_btc"], 2))
-        print("Available GBP:", round(self.stats["available_gbp"], 2))
-        print("Current BTC Price:", round(self.stats["btc_price"], 2))
-
-    def simulate(self, days, verbose=False):
-        for day in range(days):
-            self.stats["day"] = day
-            if verbose:
-                print(f"Day {day}\n--------------")
-                self.print_market_stats()
-                print()
-            else:
-                print(f"Day {day}...", end="")
-            if (day + 1) % 90 == 0:
-                self.add_BTC()
+    def add_btc(self):
+        new_btc = int(self.get_total_btc() * 0.6)
+        while new_btc > 0:
+            min_btc = min(a.btc for a in self.agents)
+            max_btc = max(a.btc for a in self.agents)
             random.shuffle(self.agents)
             for agent in self.agents:
-                action = agent.trade(self.stats)
-                self.update_price(action)
-            self.stats["btc_close_prices"].append(self.stats["btc_price"])
-            if verbose:
-                print()
-                self.print_market_stats()
-                print(f"--------------")
-                print("\n\n")
-            else:
-                print("done")
+                normalized_btc = (agent.btc - min_btc) / (max_btc - min_btc)
+                if normalized_btc > random.random():
+                    btc_to_get = max(1, int(new_btc * 0.1))
+                    agent.btc += btc_to_get
+                    new_btc -= btc_to_get
 
-    def collect_statistics(self):
-        pass
+    def execute_order(self, order):
+        if order is None:
+            return
+        agent = order.agent
+        market_stats = self.get_market_stats()
+        if order.type == OrderType.OPEN:
+            if (
+                agent.gbp >= order.btc * market_stats.btc_price
+                and self.btc >= order.btc
+            ):
+                agent.gbp -= order.btc * market_stats.btc_price
+                agent.btc += order.btc
+                self.gbp += order.btc * market_stats.btc_price
+                self.btc -= order.btc
+                agent.current_position = Position(
+                    order.btc, day=self.current_day, price=self.btc_price
+                )
+        elif order.type == OrderType.CLOSE:
+            if (
+                self.gbp >= order.btc * market_stats.btc_price
+                and agent.btc >= order.btc
+            ):
+                agent.gbp += order.btc * market_stats.btc_price
+                agent.btc -= order.btc
+                self.gbp -= order.btc * market_stats.btc_price
+                self.btc += order.btc
+            agent.current_position = None
+
+    def update_price(self, order):
+        if order is None:
+            return
+        if order.type == OrderType.OPEN:
+            sign = 1
+        else:
+            sign = -1
+
+        price_shift = math.floor(math.sqrt(2) / 2 * sign * math.sqrt(order.btc))
+
+        self.btc_price += price_shift
+
+    def simulate(self, days):
+        for day in range(days):
+            self.current_day = day
+            print(f"Day {day}")
+            if day % 90 == 0:
+                self.add_btc()
+            random.shuffle(self.agents)
+            for agent in self.agents:
+                # agents need info about the market to trade
+                order = agent.trade(self.get_market_stats())
+                self.execute_order(order)
+                self.update_price(order)
+            self.btc_close_prices.append(self.btc_price)
