@@ -7,7 +7,7 @@ import math
 import os
 from matplotlib import pyplot as plt
 import pandas as pd
-
+from tqdm import tqdm
 import shutil
 
 
@@ -97,9 +97,8 @@ class Market:
         print("Cyberattack!")
 
     def simulate(self, days, cyberattack=False):
-        for day in range(days):
+        for day in tqdm(range(days), desc="Simulating Days"):
             self.current_day = day
-            print(f"Day {day}")
             if day % 90 == 0:
                 self.add_btc()
             if cyberattack and day > int(days * 0.8):
@@ -107,7 +106,6 @@ class Market:
                 cyberattack = False
             random.shuffle(self.agents)
             for agent in self.agents:
-                # agents need info about the market to trade
                 order = agent.trade(self.get_market_stats())
                 self.execute_order(order)
                 self.update_price(order)
@@ -134,6 +132,13 @@ class Market:
 
         if not os.path.exists(dir):
             os.makedirs(dir)
+
+        plt.plot(self.btc_close_prices)
+        plt.title("Bitcoin Close Prices")
+        plt.xlabel("Day")
+        plt.ylabel("Price(GBP)")
+        plt.savefig(dir + "/btc_close_prices.pdf")
+        plt.clf()
 
         values = []
         labels = []
@@ -163,7 +168,12 @@ class Market:
             values.append(stats.wealth_acquisition[k])
             labels.append(k)
         plt.bar(labels, values)
+        for i, value in enumerate(values):
+            plt.text(
+                i, value + 0.1, str(utils.millify(value)), ha="center", va="bottom"
+            )
         plt.title("Wealth Acquisition")
+        plt.ylabel("Amount(GBP)")
         plt.tight_layout()
         plt.savefig(dir + "/wealth_acquisition.pdf")
         plt.clf()

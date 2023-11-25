@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy
+import math
 
 
 def load_historic_btc_prices(
@@ -25,3 +26,18 @@ def calculate_ema(n, close_prices):
 def absolute_value(val, vals):
     a = numpy.round(val / 100.0 * vals.sum(), 0)
     return a
+
+
+millnames = ["", " Thousand", " Million", " Billion", " Trillion"]
+
+
+def millify(n):
+    n = float(n)
+    millidx = max(
+        0,
+        min(
+            len(millnames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))
+        ),
+    )
+
+    return "{:.0f}{}".format(n / 10 ** (3 * millidx), millnames[millidx])
