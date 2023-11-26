@@ -13,7 +13,9 @@ import shutil
 
 class Market:
     def __init__(self, agents) -> None:
-        self.btc_close_prices = utils.load_historic_btc_prices("BTC-GBP.csv", "Close")
+        self.btc_close_prices = utils.load_historic_btc_prices(
+            "BTC-GBP.csv", "Close", start_date="2018-11-25", end_date="2020-01-01"
+        )
         self.btc_price = self.btc_close_prices[-1]
         self.initial_btc_price = self.btc_price
         self.btc = random.uniform(*MARKET_BTC_INIT)
@@ -93,7 +95,11 @@ class Market:
         self.btc_price = max(self.btc_price, 0.001)
 
     def cyberattack(self):
-        print("Cyberattack!")
+        random.shuffle(self.agents)
+        for i in range(int(len(self.agents) * 0.4)):
+            order = Order(OrderType.CLOSE, self.agents[i].btc)
+            self.execute_order(self.agents[i], order)
+            self.agents[i].blocked = True
 
     def simulate(self, days, cyberattack=False):
         for day in tqdm(range(days), desc="Simulating Days"):
@@ -105,6 +111,8 @@ class Market:
                 cyberattack = False
             random.shuffle(self.agents)
             for agent in self.agents:
+                if agent.blocked:
+                    continue
                 order = agent.trade(self.get_market_stats())
                 self.execute_order(agent, order)
                 self.update_price(order)
@@ -132,9 +140,17 @@ class Market:
         if not os.path.exists(dir):
             os.makedirs(dir)
 
-        plt.plot(self.btc_close_prices)
+        historical_prices = utils.load_historic_btc_prices(
+            "BTC-GBP.csv", "Close", start_date="2018-11-25", end_date="2023-10-31"
+        )
+        plt.plot(self.btc_close_prices, label="Simulated Prices")
+        plt.plot(historical_prices, label="Hisotrical Prices")
+        plt.axvline(
+            x=len(self.btc_close_prices) - NUM_DAYS, color="r", label="Simulation Start"
+        )
+        plt.legend()
         plt.title("Bitcoin Close Prices")
-        plt.xlabel("Day")
+        plt.xlabel("Day (Historical + Simulated)")
         plt.ylabel("Price(GBP)")
         plt.savefig(dir + "/btc_close_prices.pdf")
         plt.clf()

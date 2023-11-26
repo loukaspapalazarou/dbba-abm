@@ -13,6 +13,7 @@ class Agent:
         self.initial_gbp = self.gbp
         self.current_position = None
         self.opened_positions = 0
+        self.blocked = False
 
     def whatami(self):
         s = type(self).__name__
@@ -89,7 +90,6 @@ class Chartist(Agent):
 
     def rule2open(self, market_stats):
         ema = calculate_ema(CHARTIST_RULE_2_N, market_stats.btc_close_prices)
-        # return market_stats.btc_close_prices[-1] > ema
         return market_stats.btc_price > ema
 
     def rule2close(self, market_stats):
