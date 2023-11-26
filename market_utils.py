@@ -29,11 +29,11 @@ class OrderType(Enum):
 
 
 class Order:
-    def __init__(self, agent, type: OrderType, btc, day) -> None:
-        self.agent = agent
+    def __init__(self, type: OrderType, btc) -> None:
+        # self.agent = agent
         self.type = type
         self.btc = btc
-        self.day = day
+        # self.day = day
 
 
 class MarketStats:

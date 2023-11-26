@@ -52,10 +52,9 @@ class Market:
                     agent.btc += btc_to_get
                     new_btc -= btc_to_get
 
-    def execute_order(self, order):
+    def execute_order(self, agent, order):
         if order is None:
             return
-        agent = order.agent
         market_stats = self.get_market_stats()
         if order.type == OrderType.OPEN:
             if (
@@ -107,7 +106,7 @@ class Market:
             random.shuffle(self.agents)
             for agent in self.agents:
                 order = agent.trade(self.get_market_stats())
-                self.execute_order(order)
+                self.execute_order(agent, order)
                 self.update_price(order)
             self.btc_close_prices.append(self.btc_price)
 
@@ -145,7 +144,7 @@ class Market:
         for k in stats.btc_ratio:
             values.append(stats.btc_ratio[k])
             labels.append(k)
-        plt.pie(values, labels=labels)
+        plt.pie(values, labels=labels, autopct="%1.1f%%")
         plt.title("Bitcoin Ratio")
         plt.tight_layout()
         plt.savefig(dir + "/btc_ratio.pdf")
@@ -156,7 +155,7 @@ class Market:
         for k in stats.gbp_ratio:
             values.append(stats.gbp_ratio[k])
             labels.append(k)
-        plt.pie(values, labels=labels)
+        plt.pie(values, labels=labels, autopct="%1.1f%%")
         plt.title("GBP Ratio")
         plt.tight_layout()
         plt.savefig(dir + "/gbp_ratio.pdf")

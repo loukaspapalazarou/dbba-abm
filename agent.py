@@ -33,13 +33,11 @@ class RandomTrader(Agent):
         if random.random() < RANDOM_TRADER_TRADE_PROBABILITY:
             if self.current_position == None:
                 order = Order(
-                    self,
                     OrderType.OPEN,
                     self.gbp / market_stats.btc_price,
-                    market_stats.day,
                 )
             else:
-                order = Order(self, OrderType.CLOSE, self.btc, market_stats.day)
+                order = Order(OrderType.CLOSE, self.btc)
             return order
         return None
 
@@ -121,13 +119,9 @@ class Chartist(Agent):
 
         if self.current_position == None and self.gbp > 0:
             order = Order(
-                self,
                 type=OrderType.OPEN,
                 btc=self.gbp / market_stats.btc_price,
-                day=market_stats.day,
             )
         else:
-            order = Order(
-                self, type=OrderType.CLOSE, btc=self.btc, day=market_stats.day
-            )
+            order = Order(type=OrderType.CLOSE, btc=self.btc)
         return order
