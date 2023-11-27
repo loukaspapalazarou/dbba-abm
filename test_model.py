@@ -17,6 +17,5 @@ if __name__ == "__main__":
         procs.append(p)
         p.start()
 
-        # complete the processes
     for t in procs:
         t.join()
