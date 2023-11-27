@@ -1,7 +1,7 @@
 from parameters import *
 from market import Market
 import multiprocessing
-from itertools import permutations
+from itertools import combinations_with_replacement
 
 
 def run_sim(n_vals, cyberattack=False):
@@ -14,8 +14,11 @@ def run_sim(n_vals, cyberattack=False):
 
 
 if __name__ == "__main__":
-    n_vals = [1, 5, 10, 20, 50]
-    n_vals = list(permutations(n_vals, 2))
+    nums = [1, 10, 30]
+    n_vals = set()
+    for i in nums:
+        for j in nums:
+            n_vals.add((i, j))
 
     procs = []
     for n in n_vals:
