@@ -8,28 +8,47 @@ import os
 from matplotlib import pyplot as plt
 import pandas as pd
 from tqdm import tqdm
-import shutil
+import time
 
 
 class Market:
-    def __init__(self, agents) -> None:
+    def __init__(
+        self,
+        agents,
+        rule1n=CHARTIST_RULE_1_N,
+        rule2n=CHARTIST_RULE_2_N,
+    ) -> None:
         self.btc_close_prices = utils.load_historic_btc_prices(
-            "BTC-GBP.csv", "Close", start_date="2018-11-25", end_date="2020-01-01"
+            "BTC-GBP.csv",
+            "Close",
+            start_date="2018-11-25",
+            end_date="2020-01-01",
         )
         self.btc_price = self.btc_close_prices[-1]
         self.initial_btc_price = self.btc_price
         self.btc = random.uniform(*MARKET_BTC_INIT)
         self.gbp = random.uniform(*MARKET_GBP_INIT)
         self.current_day = 0
+        self.rule1n = rule1n
+        self.rule2n = rule2n
+        self.last_simulation_time = -1
 
         self.agents = []
         i = 0
         for _ in range(agents // 5):
             self.agents.append(RandomTrader(id=i))
-            self.agents.append(Chartist(id=i + 1, type=1))
-            self.agents.append(Chartist(id=i + 2, type=2))
-            self.agents.append(Chartist(id=i + 3, type=3))
-            self.agents.append(Chartist(id=i + 4, type=4))
+            self.agents.append(
+                Chartist(id=i + 1, type=1, rule1n=self.rule1n, rule2n=self.rule2n)
+            )
+            self.agents.append(
+                Chartist(id=i + 2, type=2, rule1n=self.rule1n, rule2n=self.rule2n)
+            )
+            self.agents.append(
+                Chartist(id=i + 3, type=3, rule1n=self.rule1n, rule2n=self.rule2n)
+            )
+            self.agents.append(
+                Chartist(id=i + 4, type=4, rule1n=self.rule1n, rule2n=self.rule2n)
+            )
             i += 5
 
     def get_market_stats(self):
@@ -101,8 +120,9 @@ class Market:
             self.execute_order(self.agents[i], order)
             self.agents[i].blocked = True
 
-    def simulate(self, days, cyberattack=False):
-        for day in tqdm(range(days), desc="Simulating Days"):
+    def simulate(self, days, cyberattack=False, dir=EXPERIMENT_NAME):
+        start = time.perf_counter()
+        for day in tqdm(range(days), desc=f"Simulating {dir}"):
             self.current_day = day
             if day % 90 == 0:
                 self.add_btc()
@@ -117,8 +137,10 @@ class Market:
                 self.execute_order(agent, order)
                 self.update_price(order)
             self.btc_close_prices.append(self.btc_price)
+        self.last_simulation_time = time.perf_counter() - start
+        self.save_simulation_stats(dir)
 
-    def save_simulation_stats(self, dir="experiment"):
+    def save_simulation_stats(self, dir):
         stats = SimulationStats()
         total_btc = 0
         total_gbp = 0
@@ -146,7 +168,7 @@ class Market:
         plt.plot(self.btc_close_prices, label="Simulated Prices")
         plt.plot(historical_prices, label="Hisotrical Prices")
         plt.axvline(
-            x=len(self.btc_close_prices) - NUM_DAYS, color="r", label="Simulation Start"
+            x=len(self.btc_close_prices) - NUM_DAYS, color="g", label="Simulation Start"
         )
         plt.legend()
         plt.title("Bitcoin Close Prices")
@@ -202,4 +224,11 @@ class Market:
         df = pd.DataFrame(data)
         df = df.round(4)
         df.to_csv(os.path.join(dir, "simulation_stats.csv"), index=False)
-        shutil.copyfile("parameters.py", dir + "/parameters_snapshot.py")
+
+        with open(f"{dir}/parameters.txt", "w") as f:
+            f.write(f"NUM_DAYS={self.current_day+1}\n")
+            f.write(f"NUM_AGENTS={len(self.agents)}\n")
+            f.write(f"NUM_DAYS={RANDOM_TRADER_TRADE_PROBABILITY}\n")
+            f.write(f"RULE 1 N={self.rule1n}\n")
+            f.write(f"RULE 2 N={self.rule2n}\n")
+            f.write(f"SIMULATION TIME={round(self.last_simulation_time,4)}s\n")

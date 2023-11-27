@@ -44,9 +44,11 @@ class RandomTrader(Agent):
 
 
 class Chartist(Agent):
-    def __init__(self, id, type) -> None:
+    def __init__(self, id, type, rule1n, rule2n) -> None:
         super().__init__(id)
         self.type = type
+        self.rule1n = rule1n
+        self.rule2n = rule2n
 
         match type:
             case 1:
@@ -74,7 +76,7 @@ class Chartist(Agent):
 
     def rule1open(self, market_stats):
         average_price_n_days = (
-            sum(market_stats.btc_close_prices[:-CHARTIST_RULE_1_N]) / CHARTIST_RULE_1_N
+            sum(market_stats.btc_close_prices[: -self.rule1n]) / self.rule1n
         )
         if market_stats.btc_price < average_price_n_days:
             return True
@@ -82,18 +84,18 @@ class Chartist(Agent):
 
     def rule1close(self, market_stats):
         if (
-            market_stats.day - self.current_position.day <= CHARTIST_RULE_1_N
+            market_stats.day - self.current_position.day <= self.rule1n
             and market_stats.btc_price > self.current_position.price
         ):
             return True
         return False
 
     def rule2open(self, market_stats):
-        ema = calculate_ema(CHARTIST_RULE_2_N, market_stats.btc_close_prices)
+        ema = calculate_ema(self.rule2n, market_stats.btc_close_prices)
         return market_stats.btc_price > ema
 
     def rule2close(self, market_stats):
-        ema = calculate_ema(CHARTIST_RULE_2_N, market_stats.btc_close_prices)
+        ema = calculate_ema(self.rule2n, market_stats.btc_close_prices)
         return self.current_position.price < ema
 
     def trade(self, market_stats) -> Order:

@@ -1,10 +1,10 @@
 from datetime import date
 
-EXPERIMENT_NAME = "test"
+EXPERIMENT_NAME = "experiment"
 START_DATE = date(2020, 1, 1)
 END_DATE = date(2023, 10, 31)
 NUM_DAYS = (END_DATE - START_DATE).days
-NUM_AGENTS = 100
+NUM_AGENTS = 100_000
 AGENT_BTC_INIT = (0.1, 2)
 AGENT_GBP_INIT = (500, 30_000)
 MARKET_BTC_INIT = (500, 1_000)
