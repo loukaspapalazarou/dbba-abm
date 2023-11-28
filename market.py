@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 import pandas as pd
 from tqdm import tqdm
 import time
+import logging
 
 
 class Market:
@@ -36,9 +37,13 @@ class Market:
         self.include_loucas = include_loucas
         self.cyberattack_day = None
 
+        self.btc_in_positions = 0
+
         self.gbp = random.uniform(*MARKET_GBP_INIT)
         self.btc = MARKET_BTC_INIT
-        self.total_btc = self.get_total_btc()
+
+        self.log = logging.getLogger(__name__)
+        self.log.setLevel(logging.INFO)
 
     def init_agents(self, num_agents, include_loucas):
         agents = []
@@ -89,30 +94,30 @@ class Market:
     def execute_order(self, agent, order):
         if order is None:
             return
-        market_stats = self.get_market_stats()
-        if order.type == OrderType.OPEN:
-            if (
-                agent.gbp >= order.btc * market_stats.btc_price
-                and self.btc >= order.btc
-            ):
-                agent.gbp -= order.btc * market_stats.btc_price
-                agent.btc += order.btc
-                self.gbp += order.btc * market_stats.btc_price
-                self.btc -= order.btc
-                agent.current_position = Position(
-                    order.btc, day=self.current_day, price=self.btc_price
-                )
-                agent.opened_positions += 1
-        elif order.type == OrderType.CLOSE:
-            if (
-                self.gbp >= order.btc * market_stats.btc_price
-                and agent.btc >= order.btc
-            ):
-                agent.gbp += order.btc * market_stats.btc_price
-                agent.btc -= order.btc
-                self.gbp -= order.btc * market_stats.btc_price
-                self.btc += order.btc
-            agent.current_position = None
+        match order.type:
+            case OrderType.OPEN:
+                if agent.gbp >= order.btc * self.btc_price and self.btc >= order.btc:
+                    agent.gbp -= order.btc * self.btc_price
+                    agent.btc += order.btc
+                    self.gbp += order.btc * self.btc_price
+                    self.btc -= order.btc
+                    agent.current_position = Position(
+                        order.btc, day=self.current_day, price=self.btc_price
+                    )
+                    self.log.info(
+                        f"Day {self.current_day}: Agent {agent.id} ({agent.whatami()}) OPENED a postion. {order.btc} BTC at {self.btc_price} for {order.btc * self.btc_price} GBP. Current GBP {agent.gbp}"
+                    )
+
+            case OrderType.CLOSE:
+                if self.gbp >= order.btc * self.btc_price and agent.btc >= order.btc:
+                    agent.gbp += order.btc * self.btc_price
+                    agent.btc -= order.btc
+                    self.gbp -= order.btc * self.btc_price
+                    self.btc += order.btc
+                    agent.current_position = None
+                    self.log.info(
+                        f"Day {self.current_day}: Agent {agent.id} ({agent.whatami()}) CLOSED a postion. {order.btc} BTC at {self.btc_price} for {order.btc * self.btc_price} GBP. Current GBP {agent.gbp}"
+                    )
 
     def update_price(self, order):
         if order is None:
@@ -121,29 +126,28 @@ class Market:
             sign = 1
         else:
             sign = -1
-
-        proportion = order.btc / (self.total_btc - self.btc) * 100
-
-        price_shift = math.floor(math.sqrt(2) / 2 * sign * proportion)
+        price_shift = math.floor(math.sqrt(2) / 2 * sign * math.sqrt(order.btc))
         self.btc_price += price_shift
-        self.btc_price = max(self.btc_price, 0.001)
 
     def cyberattack(self):
-        random.shuffle(self.agents)
-        for i in range(int(len(self.agents) * 0.4)):
-            order = Order(OrderType.CLOSE, self.agents[i].btc)
-            self.execute_order(self.agents[i], order)
-            self.agents[i].blocked = True
+        random_group = random.choices(self.agents, k=int(len(self.agents) * 0.4))
+        for agent in random_group:
+            order = Order(OrderType.CLOSE, agent.btc)
+            self.execute_order(agent, order)
+            agent.blocked = True
 
     def simulate(self, days=NUM_DAYS, cyberattack=False, dir=EXPERIMENT_NAME):
+        file_handler = logging.FileHandler(dir + "/simulation.log", mode="w")
+        self.log.addHandler(file_handler)
         start = time.perf_counter()
         for day in tqdm(range(days), desc=f"Simulating {dir}"):
             self.current_day = day
             if day % 90 == 0:
                 self.release_new_btc()
-            self.total_btc = self.get_total_btc()
+                self.log.info(f"New BTC released")
             if cyberattack and day > int(days * 0.8):
                 self.cyberattack()
+                self.log.info("Cyberattack")
                 cyberattack = False
                 self.cyberattack_day = day
             random.shuffle(self.agents)
@@ -154,6 +158,7 @@ class Market:
                 self.execute_order(agent, order)
                 self.update_price(order)
             self.btc_close_prices.append(self.btc_price)
+            self.log.info(f"DAY {self.current_day} DONE. BTC Price {self.btc_price}")
         self.last_simulation_time = time.perf_counter() - start
         self.save_simulation_stats(dir)
 
@@ -172,7 +177,7 @@ class Market:
                 current_btc_price=self.btc_price,
                 initial_btc_price=self.initial_btc_price,
             )
-            stats.num_opened_positions[agent_type] += agent.opened_positions
+
         for btc_key, gbp_key in zip(stats.btc_ratio, stats.gbp_ratio):
             stats.btc_ratio[btc_key] = stats.btc_ratio[btc_key] / total_btc
             stats.gbp_ratio[gbp_key] = stats.gbp_ratio[gbp_key] / total_gbp
@@ -197,7 +202,7 @@ class Market:
         plt.savefig(dir + "/btc_close_prices.pdf")
         plt.clf()
 
-        values = [self.btc]
+        values = [self.btc / self.get_total_btc()]
         labels = ["Liquidity Pool"]
         for k in stats.btc_ratio:
             values.append(stats.btc_ratio[k])
@@ -208,7 +213,7 @@ class Market:
         plt.savefig(dir + "/btc_ratio.pdf")
         plt.clf()
 
-        values = [self.gbp]
+        values = [self.gbp / self.get_total_gbp()]
         labels = ["Liquidity Pool"]
         for k in stats.gbp_ratio:
             values.append(stats.gbp_ratio[k])
@@ -237,8 +242,8 @@ class Market:
 
         values = []
         labels = []
-        for k in stats.wealth_acquisition:
-            values.append(stats.wealth_acquisition[k])
+        for k in stats.num_opened_positions:
+            values.append(stats.num_opened_positions[k])
             labels.append(k)
         plt.bar(labels, values)
         for i, value in enumerate(values):
@@ -263,11 +268,4 @@ class Market:
         df.to_csv(os.path.join(dir, "simulation_stats.csv"), index=False)
 
         with open(f"{dir}/parameters.txt", "w") as f:
-            f.write(f"NUM_DAYS={self.current_day+1}\n")
-            f.write(f"NUM_AGENTS={len(self.agents)}\n")
-            f.write(
-                f"RANDOM_TRADER_TRADE_PROBABILITY={RANDOM_TRADER_TRADE_PROBABILITY}\n"
-            )
-            f.write(f"RULE 1 N={self.rule1n}\n")
-            f.write(f"RULE 2 N={self.rule2n}\n")
-            f.write(f"SIMULATION TIME={round(self.last_simulation_time,4)}s\n")
+            f.write(f"TODO\n")

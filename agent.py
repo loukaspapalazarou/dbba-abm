@@ -32,13 +32,14 @@ class Agent:
 class RandomTrader(Agent):
     def trade(self, market_stats) -> Order:
         if random.random() < RANDOM_TRADER_TRADE_PROBABILITY:
-            if self.current_position == None:
-                order = Order(
-                    OrderType.OPEN,
-                    self.gbp / market_stats.btc_price,
-                )
+            if self.current_position is None:
+                allocated_gpb = self.gbp * random.uniform(*GBP_TO_TRADE_RATIO)
+                requested_btc = allocated_gpb / market_stats.btc_price
+                if requested_btc < MINIMUM_BTC_ORDER:
+                    return None
+                order = Order(OrderType.OPEN, btc=requested_btc)
             else:
-                order = Order(OrderType.CLOSE, self.btc)
+                order = Order(OrderType.CLOSE, btc=self.btc)
             return order
         return None
 
@@ -78,25 +79,25 @@ class Chartist(Agent):
         average_price_n_days = (
             sum(market_stats.btc_close_prices[: -self.rule1n]) / self.rule1n
         )
-        if market_stats.btc_price < average_price_n_days:
+        if market_stats.btc_price <= average_price_n_days:
             return True
         return False
 
     def rule1close(self, market_stats):
         if (
             market_stats.day - self.current_position.day <= self.rule1n
-            and market_stats.btc_price > self.current_position.price
+            and market_stats.btc_price >= self.current_position.price
         ):
             return True
         return False
 
     def rule2open(self, market_stats):
         ema = calculate_ema(self.rule2n, market_stats.btc_close_prices)
-        return market_stats.btc_price > ema
+        return market_stats.btc_price >= ema
 
     def rule2close(self, market_stats):
         ema = calculate_ema(self.rule2n, market_stats.btc_close_prices)
-        return self.current_position.price < ema
+        return self.current_position.price <= ema
 
     def trade(self, market_stats) -> Order:
         if self.current_position is None:
@@ -119,10 +120,14 @@ class Chartist(Agent):
         if not want_to_trade:
             return None
 
-        if self.current_position == None and self.gbp > 0:
+        if self.current_position is None:
+            allocated_gpb = self.gbp * random.uniform(*GBP_TO_TRADE_RATIO)
+            requested_btc = allocated_gpb / market_stats.btc_price
+            if requested_btc < MINIMUM_BTC_ORDER:
+                return None
             order = Order(
                 type=OrderType.OPEN,
-                btc=self.gbp / market_stats.btc_price,
+                btc=requested_btc,
             )
         else:
             order = Order(type=OrderType.CLOSE, btc=self.btc)
@@ -148,11 +153,15 @@ class LoucasAgent(Agent):
 
     def trade(self, market_stats):
         order = None
-        if self.current_position == None and self.gbp > 0:
+        if self.current_position is None and self.gbp > 0:
             if self.open_rule(market_stats):
+                allocated_gpb = self.gbp * random.uniform(*GBP_TO_TRADE_RATIO)
+                requested_btc = allocated_gpb / market_stats.btc_price
+                if requested_btc < MINIMUM_BTC_ORDER:
+                    return None
                 order = Order(
                     type=OrderType.OPEN,
-                    btc=self.gbp / market_stats.btc_price,
+                    btc=requested_btc,
                 )
         else:
             if self.close_rule(market_stats):
