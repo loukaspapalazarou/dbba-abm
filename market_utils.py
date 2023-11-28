@@ -2,7 +2,7 @@ from enum import Enum
 
 
 class SimulationStats:
-    def __init__(self) -> None:
+    def __init__(self, include_loucas=False) -> None:
         temp = {
             "RandomTrader": 0,
             "Chartist_1": 0,
@@ -10,6 +10,8 @@ class SimulationStats:
             "Chartist_3": 0,
             "Chartist_4": 0,
         }
+        if include_loucas:
+            temp["LoucasAgent"] = 0
         self.gbp_ratio = temp.copy()
         self.btc_ratio = temp.copy()
         self.wealth_acquisition = temp.copy()

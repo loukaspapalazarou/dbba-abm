@@ -8,7 +8,7 @@ class Agent:
     def __init__(self, id) -> None:
         self.id = id
         self.btc = random.uniform(*AGENT_BTC_INIT)
-        self.gbp = random.uniform(*AGENT_GBP_INIT)
+        self.gbp = random.uniform(AGENT_GBP_INIT[0], AGENT_GBP_INIT[1])
         self.initial_btc = self.btc
         self.initial_gbp = self.gbp
         self.current_position = None
@@ -127,3 +127,36 @@ class Chartist(Agent):
         else:
             order = Order(type=OrderType.CLOSE, btc=self.btc)
         return order
+
+
+class LoucasAgent(Agent):
+    def __init__(self, id, open_n=10, close_n=0.1) -> None:
+        super().__init__(id)
+        self.open_n = open_n
+        self.close_n = close_n
+
+    def open_rule(self, market_stats):
+        if len(market_stats.btc_close_prices) < self.open_n:
+            return False
+        last_n_values = market_stats.btc_close_prices[-self.open_n :]
+        return all(
+            last_n_values[i] < last_n_values[i + 1] for i in range(self.open_n - 1)
+        )
+
+    def close_rule(self, market_stats):
+        self.current_position.price < market_stats.btc_price * self.close_n
+
+    def trade(self, market_stats):
+        order = None
+        if self.current_position == None and self.gbp > 0:
+            if self.open_rule(market_stats):
+                order = Order(
+                    type=OrderType.OPEN,
+                    btc=self.gbp / market_stats.btc_price,
+                )
+        else:
+            if self.close_rule(market_stats):
+                order = Order(type=OrderType.CLOSE, btc=self.btc)
+        return order
+
+    # CAN AGENTS SELL MORE THAN THEIR CURRENT POSITION ??????????
